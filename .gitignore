@@ -36,7 +36,11 @@ docs
 reference
 CLAUDE.md
 AGENTS.md
+!AGENTS.md
 .loop-log
 
 __pycache__/
 *.py[cod]
+
+# Locally generated Windows installers
+installers/

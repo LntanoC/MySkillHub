@@ -278,7 +278,3 @@ npm run cli:build
     <img src="assets/star-history.svg" width="800" alt="xingkongliang/skills-manager 的 Star History 图" />
   </a>
 </p>
-
-## License
-
-MIT

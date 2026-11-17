@@ -2005,6 +2005,7 @@ export function MySkills() {
         isActivePreset={Boolean(viewedPreset && viewedPreset.id === activePreset?.id)}
         projects={projects}
         onProjectsChanged={refreshProjects}
+        onSourceChanged={() => { void refreshManagedSkills(); }}
       />
 
       <ConfirmDialog

@@ -2,6 +2,38 @@
   "app": {
     "name": "MySkillHub"
   },
+  "mindmap": {
+    "translationTitle": "AI translation for skill descriptions",
+    "translationNotice": "Translate sends detected English descriptions to the configured endpoint and may incur API charges. The key and translations are kept only while this page is open; skill files are not modified.",
+    "apiEndpoint": "API endpoint (Chat Completions)",
+    "apiModel": "Model name",
+    "apiKey": "API key",
+    "translateAll": "Translate English descriptions ({{count}})",
+    "translating": "Translating {{done}} / {{total}}",
+    "translationFailed": "Translation failed. Check the API settings and retry.",
+    "original": "Show original",
+    "navigation": "Skill Map",
+    "title": "Agent Skill Map",
+    "subtitle": "Explore skills discovered for each agent",
+    "refresh": "Rescan",
+    "search": "Search agents, skills or paths",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "scanFailed": "Some directories could not be scanned. Results may be incomplete; agents marked ! could not be read. Please retry.",
+    "loading": "Scanning skills…",
+    "empty": "No installed agents were detected.",
+    "counts": "{{agents}} agents · {{skills}} skill locations",
+    "canvas": "Agent skill mind map",
+    "plugin": "Plugin",
+    "disabled": "Disabled",
+    "root": "Skill map",
+    "close": "Close details",
+    "pluginOwner": "Plugin: {{name}}",
+    "ownershipUnknown": "Installation method not confirmed",
+    "scope": "Shows recognized agents' global skill directories, other known scan locations, and user-level Claude plugin skills. Project skills and unrecognized plugins may be missing."
+  },
   "sidebar": {
     "dashboard": "Dashboard",
     "mySkills": "Library",
@@ -234,6 +266,19 @@
     "hint": "You can connect or restore a backup at any time from the Backup page in the sidebar."
   },
   "mySkills": {
+    "associate": {
+      "title": "Associate a Git source",
+      "help": "Verify the source and preview first. Only matching managed content can be associated; differing local files remain unchanged. The comparison excludes ignored caches and Git metadata.",
+      "url": "Repository HTTPS URL",
+      "branch": "Branch (leave blank for default)",
+      "path": "Skill directory in repository (blank for root)",
+      "preview": "Preview comparison",
+      "revision": "Reviewed commit: {{revision}}",
+      "different": "Content differs, so it cannot be associated directly. Your files remain unchanged.",
+      "identical": "Managed content matches. Confirming records the source without replacing skill files.",
+      "confirm": "Associate this revision",
+      "success": "Git source associated."
+    },
     "title": "Library",
     "applyToDefault": "Apply Preset",
     "applied": "Applied",
@@ -556,6 +601,9 @@
     },
     "scan": {
       "title": "Scan Local Skills",
+      "gitCandidate": "Candidate Git source (verify before use): {{url}} · branch {{branch}} · path {{path}}",
+      "sourceUnknown": "Source unknown: check installation records; a matching name does not prove origin.",
+      "pluginOwner": "Claude plugin installation record: {{name}}. Update through the plugin manager; this record does not prove it is enabled in this session.",
       "initial": "Scan agent skill folders already present on this machine.",
       "summary": "Scanned {{tools}} tool folders and found {{skills}} importable skills.",
       "rescan": "Rescan",

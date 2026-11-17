@@ -2,6 +2,38 @@
   "app": {
     "name": "MySkillHub"
   },
+  "mindmap": {
+    "translationTitle": "AI 翻译技能介绍",
+    "translationNotice": "填写模型 API 后，点击翻译会将检测到的英文技能介绍发送到所填地址，可能产生 API 费用。密钥和译文仅在此页面打开期间保留，原技能文件不会修改。",
+    "apiEndpoint": "API 地址（Chat Completions）",
+    "apiModel": "模型名称",
+    "apiKey": "API 密钥",
+    "translateAll": "翻译英文介绍（{{count}} 条）",
+    "translating": "正在翻译 {{done}} / {{total}}",
+    "translationFailed": "翻译失败，请检查 API 配置后重试。",
+    "original": "查看英文原文",
+    "navigation": "技能导图",
+    "title": "Agent 技能导图",
+    "subtitle": "直观查看各个 Agent 已发现的技能",
+    "refresh": "重新扫描",
+    "search": "搜索 Agent、技能或路径",
+    "expandAll": "全部展开",
+    "collapseAll": "全部收起",
+    "zoomOut": "缩小",
+    "zoomIn": "放大",
+    "scanFailed": "部分目录扫描失败，显示的技能可能不完整。标有 ! 的 Agent 读取失败，请重试。",
+    "loading": "正在扫描技能…",
+    "empty": "暂未检测到已安装的 Agent。",
+    "counts": "{{agents}} 个 Agent · {{skills}} 个技能位置",
+    "canvas": "Agent 技能思维导图",
+    "plugin": "插件",
+    "disabled": "已禁用",
+    "root": "技能地图",
+    "close": "关闭详情",
+    "pluginOwner": "插件来源：{{name}}",
+    "ownershipUnknown": "安装方式尚未确认",
+    "scope": "展示已识别 Agent 的全局技能目录、其他已知扫描目录和用户级 Claude 插件技能；项目技能和未识别的插件可能未包含。"
+  },
   "sidebar": {
     "dashboard": "Dashboard",
     "mySkills": "技能库",
@@ -234,6 +266,19 @@
     "hint": "之后随时可以在侧边栏的「备份」页连接或恢复备份。"
   },
   "mySkills": {
+    "associate": {
+      "title": "关联 Git 来源",
+      "help": "先核实来源并预览。仅当受管理内容与上游一致时才能关联；存在差异时保留本地文件，等待合并功能。此比较不包含工具忽略的缓存和 Git 元数据。",
+      "url": "仓库 HTTPS 地址",
+      "branch": "分支（留空使用默认分支）",
+      "path": "仓库内技能目录（根目录留空）",
+      "preview": "预览比较",
+      "revision": "预览提交：{{revision}}",
+      "different": "内容存在差异，无法直接关联。你的文件未改变。",
+      "identical": "受管理内容一致。确认后只记录来源，不覆盖技能文件。",
+      "confirm": "确认关联此版本",
+      "success": "已关联 Git 来源。"
+    },
     "title": "技能库",
     "applyToDefault": "应用 Preset",
     "applied": "已应用",
@@ -556,6 +601,9 @@
     },
     "scan": {
       "title": "扫描本地 Skills 并导入",
+      "gitCandidate": "候选 Git 来源（需要核实）：{{url}} · 分支 {{branch}} · 路径 {{path}}",
+      "sourceUnknown": "来源未知：请根据安装记录确认，不会仅凭名称关联 GitHub。",
+      "pluginOwner": "Claude 插件安装记录：{{name}}。请通过插件管理器更新；此记录不代表当前会话已启用。",
       "initial": "扫描当前机器上各 Agent 已安装的 Skills。",
       "summary": "已扫描 {{tools}} 个工具目录，发现 {{skills}} 个可导入 Skills。",
       "rescan": "重新扫描",

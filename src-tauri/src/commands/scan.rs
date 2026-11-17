@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::core::{
-    error::AppError, installer, scanner, skill_store::SkillStore, sync_metadata, tool_adapters,
+    central_repo, error::AppError, installer, scanner, skill_store::SkillStore, sync_metadata,
+    tool_adapters,
 };
 
 fn canonicalize_lossy(path: &str) -> PathBuf {
@@ -28,15 +29,7 @@ fn match_imported_skill_id(
         return Some(existing.id.clone());
     }
 
-    if let Some(fingerprint) = rec.fingerprint.as_deref() {
-        if let Some(existing) = managed_skills
-            .iter()
-            .find(|skill| skill.content_hash.as_deref() == Some(fingerprint))
-        {
-            return Some(existing.id.clone());
-        }
-    }
-
+    // Matching bytes indicate similarity, not ownership or a shared source.
     None
 }
 
@@ -45,6 +38,23 @@ pub struct ScanResultDto {
     pub tools_scanned: usize,
     pub skills_found: usize,
     pub groups: Vec<scanner::DiscoveredGroup>,
+}
+
+/// A map refresh must not clear or rewrite the import/discovery database.
+#[tauri::command]
+pub async fn preview_agent_skill_map(
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<ScanResultDto, AppError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let adapters = tool_adapters::all_tool_adapters(&store);
+        let plan = scanner::scan_local_skills_with_adapters(&[], &adapters).map_err(AppError::io)?;
+        Ok(ScanResultDto {
+            tools_scanned: plan.tools_scanned,
+            skills_found: plan.skills_found,
+            groups: scanner::group_discovered(&plan.discovered),
+        })
+    }).await?
 }
 
 #[tauri::command]
@@ -94,7 +104,20 @@ pub async fn import_existing_skill(
     tauri::async_runtime::spawn_blocking(move || {
         sync_metadata::with_repo_lock("import existing skill", || {
             let path = PathBuf::from(&source_path);
+            if scanner::plugin_owner(&path, &scanner::claude_plugin_roots()).is_some() {
+                return Err(anyhow::anyhow!(
+                    "This skill belongs to an installed Claude plugin; manage it through the plugin manager."
+                ));
+            }
             let resolved_name = installer::resolve_local_skill_name(&path, name.as_deref())?;
+
+            let destination = central_repo::skills_dir().join(&resolved_name);
+            if std::fs::symlink_metadata(&destination).is_ok() {
+                return Err(anyhow::anyhow!(
+                    "Destination already exists; review the existing skill before importing: {}",
+                    destination.display()
+                ));
+            }
 
             let result = installer::install_from_local(&path, Some(&resolved_name))?;
 
@@ -157,6 +180,15 @@ pub async fn import_all_discovered(store: State<'_, Arc<SkillStore>>) -> Result<
                 }
                 if let Some(first) = group.locations.first() {
                     let path = PathBuf::from(&first.found_path);
+                    if scanner::plugin_owner(&path, &scanner::claude_plugin_roots()).is_some() {
+                        continue;
+                    }
+
+                    // Never overwrite an existing same-name directory during a scan import.
+                    let destination = central_repo::skills_dir().join(&group.name);
+                    if std::fs::symlink_metadata(&destination).is_ok() {
+                        continue;
+                    }
 
                     if let Ok(result) = installer::install_from_local(&path, Some(&group.name)) {
                         if store
@@ -270,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn marks_same_fingerprint_as_imported() {
+    fn matching_content_alone_does_not_prove_import() {
         let rec = discovered("/tmp/local/foo", "same-name", Some("abc123"));
         let managed = vec![managed_skill(
             "skill-1",
@@ -280,10 +312,7 @@ mod tests {
             Some("abc123"),
         )];
 
-        assert_eq!(
-            match_imported_skill_id(&rec, &managed),
-            Some("skill-1".to_string())
-        );
+        assert_eq!(match_imported_skill_id(&rec, &managed), None);
     }
 
     #[test]

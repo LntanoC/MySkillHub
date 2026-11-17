@@ -1,4 +1,4 @@
-> **MySkillHub development:** This project starts from Skills Manager source, with its MIT copyright retained. Personalized merge support is an experimental CLI and is not yet integrated into the desktop application. The application identity and data paths have been changed but are not yet verified in a desktop build; do not install over an existing app. See [MySkillHub development status](MY_SKILL_HUB.md).
+> **MySkillHub development:** This project starts from Skills Manager source. Personalized merge support is an experimental CLI and is not yet integrated into the desktop application. The application identity and data paths have been changed but are not yet verified in a desktop build; do not install over an existing app. See [MySkillHub development status](MY_SKILL_HUB.md).
 
 <p align="center">
   <img src="assets/icon.png" width="80" />
@@ -289,7 +289,3 @@ Anything else — [open an issue](https://github.com/xingkongliang/skills-manage
     <img src="assets/star-history.svg" width="800" alt="Star History chart for xingkongliang/skills-manager" />
   </a>
 </p>
-
-## License
-
-MIT

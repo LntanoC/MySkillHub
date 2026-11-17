@@ -2303,13 +2303,79 @@ pub struct SetSourceResult {
     pub subpath: Option<String>,
     pub branch: Option<String>,
     pub revision: String,
-    /// Whether the new source's content differs from the hash recorded for the
-    /// library copy. False means the re-point is metadata-only — no file is
-    /// rewritten. Compared against the recorded hash, not a fresh hash of the
-    /// central directory, so hand-edits made after install do not count as a
-    /// difference (and are left in place, since no file work runs).
+    /// Whether the new source differs from the current library files.
+    /// False means the re-point is metadata-only; no skill file is rewritten.
     pub content_changed: bool,
     pub dry_run: bool,
+}
+
+fn check_reviewed_revision(expected: Option<&str>, actual: &str) -> Result<(), AppError> {
+    if expected.is_some_and(|revision| revision != actual) {
+        return Err(AppError::invalid_input(
+            "The upstream revision changed after preview; preview again",
+        ));
+    }
+    Ok(())
+}
+
+fn check_reviewed_local_content(path: &Path, reviewed_hash: &str) -> Result<(), AppError> {
+    let current = crate::core::content_hash::hash_directory(path).map_err(AppError::io)?;
+    if current != reviewed_hash {
+        return Err(AppError::invalid_input(
+            "Skill files changed after preview; preview again",
+        ));
+    }
+    Ok(())
+}
+
+/// Preview and associate only byte-equivalent sources; this UI path never
+/// accepts force or overwrites user files. Confirmations pin the reviewed SHA.
+#[tauri::command]
+pub async fn associate_git_source(
+    skill_id: String,
+    git_url: String,
+    subpath: String,
+    branch: Option<String>,
+    expected_revision: Option<String>,
+    store: State<'_, Arc<SkillStore>>,
+) -> Result<SetSourceResult, AppError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = reqwest::Url::parse(&git_url)
+            .map_err(|_| AppError::invalid_input("Enter an HTTPS Git repository URL"))?;
+        if url.scheme() != "https"
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(AppError::invalid_input(
+                "Use an HTTPS repository URL without credentials, query, or fragment",
+            ));
+        }
+        let skill = store
+            .get_skill_by_id(&skill_id)
+            .map_err(AppError::db)?
+            .ok_or_else(|| AppError::not_found("Skill not found"))?;
+        if !matches!(skill.source_type.as_str(), "local" | "import") {
+            return Err(AppError::invalid_input(
+                "Only local skills can be associated with a new source here",
+            ));
+        }
+        let proxy = store.proxy_url();
+        set_git_source_internal(
+            &store,
+            &skill_id,
+            &git_url,
+            Some(&subpath),
+            branch.as_deref(),
+            proxy.as_deref(),
+            false,
+            expected_revision.is_none(),
+            expected_revision.as_deref(),
+        )
+    })
+    .await?
 }
 
 /// Resolve the skill directory inside a fresh checkout, strictly.
@@ -2377,6 +2443,7 @@ pub fn set_git_source_internal(
     proxy_url: Option<&str>,
     force: bool,
     dry_run: bool,
+    expected_revision: Option<&str>,
 ) -> Result<SetSourceResult, AppError> {
     let skill = store
         .get_skill_by_id(skill_id)
@@ -2402,6 +2469,7 @@ pub fn set_git_source_internal(
     let remote_revision =
         git_fetcher::resolve_remote_revision(&parsed.clone_url, branch.as_deref(), proxy_url)
             .map_err(|e| AppError::git(e.to_string()))?;
+    check_reviewed_revision(expected_revision, &remote_revision)?;
 
     let temp_dir = git_fetcher::clone_repo_ref_scoped(
         &parsed.clone_url,
@@ -2425,7 +2493,9 @@ pub fn set_git_source_internal(
 
         let new_hash =
             crate::core::content_hash::hash_directory(&skill_dir).map_err(AppError::io)?;
-        let content_changed = skill.content_hash.as_deref() != Some(new_hash.as_str());
+        let live_hash = crate::core::content_hash::hash_directory(Path::new(&skill.central_path))
+            .map_err(AppError::io)?;
+        let content_changed = live_hash != new_hash;
 
         // Report before refusing: inspecting a skill whose content differs is
         // exactly what --dry-run is for, so it must not need --force to run.
@@ -2457,6 +2527,7 @@ pub fn set_git_source_internal(
                 "Skill changed while fetching the source; re-run the command",
             ));
         }
+        check_reviewed_local_content(Path::new(&current.central_path), &live_hash)?;
 
         store
             .update_skill_update_status(skill_id, "updating")
@@ -2498,7 +2569,9 @@ pub fn set_git_source_internal(
             )
             .map_err(AppError::db)?;
         source_committed.set(true);
-        resync_copy_targets(store, &skill.id)?;
+        if content_changed {
+            resync_copy_targets(store, &skill.id)?;
+        }
         sync_metadata::write_all_from_db_unlocked(store).map_err(AppError::db)?;
         Ok((resolved_subpath.unwrap_or_default(), content_changed))
     })();
@@ -3528,6 +3601,19 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::{tempdir, TempDir};
+
+    #[test]
+    fn source_confirmation_rejects_stale_revision_or_local_files() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("SKILL.md");
+        fs::write(&file, "before").unwrap();
+        let reviewed_hash = crate::core::content_hash::hash_directory(dir.path()).unwrap();
+        assert!(check_reviewed_revision(Some("abc"), "abc").is_ok());
+        assert!(check_reviewed_revision(Some("abc"), "def").is_err());
+        assert!(check_reviewed_local_content(dir.path(), &reviewed_hash).is_ok());
+        fs::write(&file, "changed after preview").unwrap();
+        assert!(check_reviewed_local_content(dir.path(), &reviewed_hash).is_err());
+    }
 
     struct TestRepo {
         _lock: std::sync::MutexGuard<'static, ()>,

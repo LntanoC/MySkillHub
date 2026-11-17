@@ -1,6 +1,6 @@
 # MySkillHub
 
-MySkillHub 是一个开发中的跨 Agent 技能管理项目，以 Skills Manager 源码为起点，并保留原作者的 MIT 版权声明。目标是让使用者能够识别技能的来源、保留个人修改、合并上游变更，并在审阅后将版本分发给不同 Agent。
+MySkillHub 是一个开发中的跨 Agent 技能管理项目，以 Skills Manager 源码为起点。目标是让使用者能够识别技能的来源、保留个人修改、合并上游变更，并在审阅后将版本分发给不同 Agent。
 
 ## 当前状态
 
@@ -9,7 +9,6 @@ MySkillHub 是一个开发中的跨 Agent 技能管理项目，以 Skills Manage
 - [开发状态和后续工作](MY_SKILL_HUB.md)
 - [技能维护 CLI 原型](tools/maintenance/README.md)
 - [原项目说明](README.upstream.md)
-- [MIT 许可证](LICENSE)
 
 ## 开发验证
 

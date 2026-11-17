@@ -73,7 +73,6 @@ export function InstallSkills() {
   const [scanLoading, setScanLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [importingPaths, setImportingPaths] = useState<Set<string>>(new Set());
-  const [importingAll, setImportingAll] = useState(false);
   const [renameEditing, setRenameEditing] = useState<Record<string, string>>({});
   const marketListRef = useRef<HTMLDivElement | null>(null);
   const [sourceOverflowOpen, setSourceOverflowOpen] = useState(false);
@@ -579,27 +578,6 @@ export function InstallSkills() {
     }
   };
 
-  const handleImportAllDiscovered = async () => {
-    setImportingAll(true);
-    try {
-      try {
-        await api.importAllDiscovered();
-      } catch (error: unknown) {
-        toast.error(getErrorMessage(error, t("common.error")));
-        return;
-      }
-      toast.success(t("install.scan.importedAll"));
-      const results = await Promise.allSettled([
-        refreshPresets(),
-        refreshManagedSkills(),
-        runScanSilent(),
-      ]);
-      warnRejected(results, "post-import refresh");
-    } finally {
-      setImportingAll(false);
-    }
-  };
-
   const scrollMarketListToTop = () => {
     marketListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -610,7 +588,6 @@ export function InstallSkills() {
   };
 
   const scanGroups = scanResult?.groups ?? [];
-  const pendingGroups = scanGroups.filter((group) => !group.imported);
   const sourceOptions = useMemo(
     () => Array.from(new Set(marketSkills.map((skill) => skill.source))),
     [marketSkills]
@@ -1291,18 +1268,6 @@ export function InstallSkills() {
                   <RefreshCw className={cn("h-3.5 w-3.5", scanLoading && "animate-spin")} />
                   {t("install.scan.rescan")}
                 </button>
-                <button
-                  onClick={handleImportAllDiscovered}
-                  disabled={scanLoading || importingAll || pendingGroups.length === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent-border bg-accent-dark px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent disabled:opacity-50"
-                >
-                  {importingAll ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <DownloadCloud className="h-3.5 w-3.5" />
-                  )}
-                  {t("install.scan.importAll")}
-                </button>
               </div>
             </div>
 
@@ -1328,9 +1293,10 @@ export function InstallSkills() {
                     {scanGroups.map((group) => {
                       const [primaryLocation, ...otherLocations] = group.locations;
                       const primaryPath = primaryLocation?.found_path;
+                      const renameKey = primaryPath ?? group.name;
                       const isImporting = !!primaryPath && importingPaths.has(primaryPath);
-                      const isRenaming = group.name in renameEditing;
-                      const importName = renameEditing[group.name] ?? group.name;
+                      const isRenaming = renameKey in renameEditing;
+                      const importName = renameEditing[renameKey] ?? group.name;
                       const foundDate = new Date(group.found_at).toLocaleDateString(undefined, {
                         year: "numeric",
                         month: "short",
@@ -1338,22 +1304,22 @@ export function InstallSkills() {
                       });
 
                       return (
-                        <article key={group.name} className="border-b border-border-subtle last:border-b-0">
+                        <article key={primaryPath ?? group.name} className="border-b border-border-subtle last:border-b-0">
                           <div className="flex items-start justify-between gap-3 px-3 py-2">
                             <div className="min-w-0 flex-1 space-y-1.5">
                               <div className="flex min-w-0 items-center gap-2">
                                 {isRenaming ? (
                                   <input
                                     autoFocus
-                                    value={renameEditing[group.name]}
+                                    value={renameEditing[renameKey]}
                                     onChange={(e) =>
-                                      setRenameEditing((prev) => ({ ...prev, [group.name]: e.target.value }))
+                                      setRenameEditing((prev) => ({ ...prev, [renameKey]: e.target.value }))
                                     }
                                     onBlur={() => {
-                                      if (!renameEditing[group.name]?.trim()) {
+                                      if (!renameEditing[renameKey]?.trim()) {
                                         setRenameEditing((prev) => {
                                           const next = { ...prev };
-                                          delete next[group.name];
+                                          delete next[renameKey];
                                           return next;
                                         });
                                       }
@@ -1362,7 +1328,7 @@ export function InstallSkills() {
                                       if (e.key === "Escape") {
                                         setRenameEditing((prev) => {
                                           const next = { ...prev };
-                                          delete next[group.name];
+                                          delete next[renameKey];
                                           return next;
                                         });
                                       } else if (e.key === "Enter") {
@@ -1379,7 +1345,7 @@ export function InstallSkills() {
                                 {!group.imported && !isRenaming ? (
                                   <button
                                     onClick={() =>
-                                      setRenameEditing((prev) => ({ ...prev, [group.name]: group.name }))
+                                      setRenameEditing((prev) => ({ ...prev, [renameKey]: group.name }))
                                     }
                                     className="shrink-0 rounded-md p-0.5 text-muted transition-colors hover:bg-surface-hover hover:text-secondary"
                                     title={t("install.scan.rename")}
@@ -1412,13 +1378,23 @@ export function InstallSkills() {
                                   </code>
                                 </div>
                               ) : null}
+                              {primaryLocation?.git_candidate ? (
+                                <p className="break-all text-[13px] text-muted">
+                                  {t("install.scan.gitCandidate", { url: primaryLocation.git_candidate.url, branch: primaryLocation.git_candidate.branch ?? "—", path: primaryLocation.git_candidate.subpath || "." })}
+                                </p>
+                              ) : (
+                                <p className="text-[13px] text-muted">{t("install.scan.sourceUnknown")}</p>
+                              )}
+                              {primaryLocation?.plugin ? (
+                                <p className="break-all text-[13px] text-muted">{t("install.scan.pluginOwner", { name: primaryLocation.plugin })}</p>
+                              ) : null}
                             </div>
 
                             <div className="flex shrink-0 items-start justify-end">
                               {group.imported ? null : (
                                 <button
                                   onClick={() => primaryPath && handleImportDiscovered(primaryPath, importName)}
-                                  disabled={!primaryPath || isImporting}
+                                  disabled={!primaryPath || isImporting || !!primaryLocation?.plugin}
                                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-border bg-accent-dark px-2.5 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent disabled:opacity-50"
                                 >
                                   {isImporting ? (

@@ -3,6 +3,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-p
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
+  Network,
   Layers,
   Globe,
   Download,
@@ -168,6 +169,7 @@ export function Sidebar() {
   const NAV_ITEMS = [
     { name: t("sidebar.dashboard"), path: "/", icon: LayoutDashboard },
     { name: t("sidebar.mySkills"), path: "/my-skills", icon: Layers },
+    { name: t("mindmap.navigation"), path: "/skill-map", icon: Network },
     { name: t("sidebar.installSkills"), path: "/install", icon: Download },
     { name: t("sidebar.backup"), path: "/backup", icon: CloudUpload },
   ];

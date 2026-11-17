@@ -1069,6 +1069,7 @@ fn run_skills(args: SkillsArgs, store: &SkillStore, json: bool) -> anyhow::Resul
                 store.proxy_url().as_deref(),
                 force,
                 dry_run,
+                None,
             )
             .map_err(map_app_err)?;
             print_json(&report, json);

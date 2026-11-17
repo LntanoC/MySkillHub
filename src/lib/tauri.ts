@@ -113,7 +113,7 @@ export interface Preset {
 export interface DiscoveredGroup {
   name: string;
   fingerprint: string | null;
-  locations: { id: string; tool: string; found_path: string }[];
+  locations: { id: string; tool: string; found_path: string; plugin: string | null; description?: string | null; git_candidate: { url: string; branch: string | null; subpath: string } | null }[];
   imported: boolean;
   found_at: number;
 }
@@ -251,6 +251,19 @@ export const getSourceSkillDocument = (skillId: string) =>
 
 export const getSkillSourceDiff = (skillId: string) =>
   invoke<SkillSourceDiff>("get_skill_source_diff", { skillId });
+
+export interface GitSourcePreview {
+  skill_id: string;
+  clone_url: string;
+  subpath: string | null;
+  branch: string | null;
+  revision: string;
+  content_changed: boolean;
+  dry_run: boolean;
+}
+
+export const associateGitSource = (skillId: string, gitUrl: string, subpath: string, branch: string | null, expectedRevision: string | null) =>
+  invoke<GitSourcePreview>("associate_git_source", { skillId, gitUrl, subpath, branch, expectedRevision });
 
 export const deleteManagedSkill = (skillId: string) =>
   invoke<void>("delete_managed_skill", { skillId });
@@ -428,11 +441,12 @@ export const setSkillToolToggle = (
 
 export const scanLocalSkills = () => invoke<ScanResult>("scan_local_skills");
 
+export const previewAgentSkillMap = () => invoke<ScanResult>("preview_agent_skill_map");
+export const translateSkillDescription = (endpoint: string, model: string, apiKey: string, description: string) =>
+  invoke<string>("translate_skill_description", { endpoint, model, apiKey, description });
+
 export const importExistingSkill = (sourcePath: string, name?: string) =>
   invoke<void>("import_existing_skill", { sourcePath, name: name || null });
-
-export const importAllDiscovered = () =>
-  invoke<void>("import_all_discovered");
 
 // ── Browse ──
 

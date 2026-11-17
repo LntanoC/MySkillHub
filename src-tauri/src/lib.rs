@@ -810,7 +810,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(
@@ -1018,6 +1017,7 @@ pub fn run() {
             commands::skills::get_skill_document,
             commands::skills::get_source_skill_document,
             commands::skills::get_skill_source_diff,
+            commands::skills::associate_git_source,
             commands::skills::delete_managed_skill,
             commands::skills::delete_managed_skills,
             commands::skills::install_local,
@@ -1046,8 +1046,9 @@ pub fn run() {
             commands::sync::set_skill_tool_toggle,
             // Scan
             commands::scan::scan_local_skills,
+            commands::scan::preview_agent_skill_map,
+            commands::translate::translate_skill_description,
             commands::scan::import_existing_skill,
-            commands::scan::import_all_discovered,
             // Browse
             commands::browse::fetch_leaderboard,
             commands::browse::search_skillssh,

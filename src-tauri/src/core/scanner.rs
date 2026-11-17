@@ -28,6 +28,70 @@ pub struct DiscoveredLocation {
     pub id: String,
     pub tool: String,
     pub found_path: String,
+    pub git_candidate: Option<GitCandidate>,
+    pub plugin: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Claude's installation registry is evidence of ownership, not proof that a
+/// plugin is enabled in the current session. Only existing user-scope paths
+/// are considered; never infer ownership from a name or a marketplace clone.
+fn claude_plugins_from_registry(registry: &Path) -> Vec<(String, PathBuf)> {
+    let Ok(meta) = std::fs::metadata(registry) else { return vec![]; };
+    if meta.len() > 4 * 1024 * 1024 { return vec![]; }
+    let Ok(bytes) = std::fs::read(registry) else { return vec![]; };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return vec![]; };
+    let Some(plugins) = value.get("plugins").and_then(|v| v.as_object()) else { return vec![]; };
+    let mut result = Vec::new();
+    for (name, entries) in plugins {
+        let Some(entries) = entries.as_array() else { continue; };
+        for entry in entries {
+            if entry.get("scope").and_then(|v| v.as_str()) != Some("user") { continue; }
+            let Some(path) = entry.get("installPath").and_then(|v| v.as_str()) else { continue; };
+            if !Path::new(path).is_absolute() { continue; }
+            if let Ok(path) = std::fs::canonicalize(path) {
+                if path.is_dir() { result.push((name.clone(), path)); }
+            }
+        }
+    }
+    result
+}
+
+pub fn claude_plugin_roots() -> Vec<(String, PathBuf)> {
+    let config = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|p| p.join(".claude")));
+    config.map(|p| claude_plugins_from_registry(&p.join("plugins/installed_plugins.json"))).unwrap_or_default()
+}
+
+pub fn plugin_owner(path: &Path, roots: &[(String, PathBuf)]) -> Option<String> {
+    let actual = std::fs::canonicalize(path).ok()?;
+    roots.iter().find(|(_, root)| actual.starts_with(root)).map(|(name, _)| name.clone())
+}
+
+/// A repository containing a skill is only a lead, not proof of origin.
+#[derive(Debug, Clone, Serialize)]
+pub struct GitCandidate {
+    pub url: String,
+    pub branch: Option<String>,
+    pub subpath: String,
+}
+
+fn git_candidate(path: &Path) -> Option<GitCandidate> {
+    let repo = git2::Repository::discover(path).ok()?;
+    let root = std::fs::canonicalize(repo.workdir()?).ok()?;
+    let skill = std::fs::canonicalize(path).ok()?;
+    let subpath = skill.strip_prefix(&root).ok()?.to_string_lossy().replace('\\', "/");
+    let origin = repo.find_remote("origin").ok()?;
+    // Only show safe HTTP(S) URLs; never expose embedded credentials or query tokens.
+    let mut url = reqwest::Url::parse(origin.url()?).ok()?;
+    if !matches!(url.scheme(), "http" | "https") { return None; }
+    url.set_username("").ok()?;
+    url.set_password(None).ok()?;
+    url.set_query(None);
+    url.set_fragment(None);
+    let branch = repo.head().ok().and_then(|head| head.shorthand().map(str::to_string));
+    Some(GitCandidate { url: url.to_string(), branch, subpath })
 }
 
 /// Directories to skip during recursive scans (internal/tool-specific metadata).
@@ -208,6 +272,20 @@ pub fn scan_local_skills_with_adapters(
         }
     }
 
+    // Installed plugin skills are listed for visibility only, not adopted.
+    if adapters.iter().any(|adapter| adapter.key == "claude_code") {
+        for (_, root) in claude_plugin_roots() {
+            let skills = root.join("skills");
+            if skills.is_dir() {
+                for path in collect_skill_dirs(&skills) {
+                    if std::fs::canonicalize(&path).is_ok_and(|actual| actual.starts_with(&root)) {
+                        push_discovered("claude_code", path, managed_paths, &mut discovered);
+                    }
+                }
+            }
+        }
+    }
+
     let skills_found = discovered.len();
     Ok(ScanPlan {
         tools_scanned,
@@ -220,13 +298,12 @@ pub fn group_discovered(records: &[DiscoveredSkillRecord]) -> Vec<DiscoveredGrou
     use std::collections::HashMap;
     let mut groups: HashMap<String, DiscoveredGroup> = HashMap::new();
 
+    let plugin_roots = claude_plugin_roots();
     for rec in records {
         let name = rec.name_guess.clone().unwrap_or_else(|| "unknown".into());
-        let group_key = if let Some(fingerprint) = rec.fingerprint.as_deref() {
-            format!("fp:{name}:{fingerprint}")
-        } else {
-            format!("path:{name}:{}", rec.found_path)
-        };
+        // Separate physical installations even when their bytes match: a
+        // plugin and a user-managed copy can have different owners/updates.
+        let group_key = format!("path:{}:{}", rec.tool, rec.found_path);
         let entry = groups.entry(group_key).or_insert_with(|| DiscoveredGroup {
             name,
             fingerprint: rec.fingerprint.clone(),
@@ -248,6 +325,9 @@ pub fn group_discovered(records: &[DiscoveredSkillRecord]) -> Vec<DiscoveredGrou
             id: rec.id.clone(),
             tool: rec.tool.clone(),
             found_path: rec.found_path.clone(),
+            git_candidate: git_candidate(Path::new(&rec.found_path)),
+            plugin: plugin_owner(Path::new(&rec.found_path), &plugin_roots),
+            description: super::skill_metadata::parse_skill_md(Path::new(&rec.found_path)).description,
         });
     }
 
@@ -265,6 +345,58 @@ mod tests {
     fn write_skill(dir: &Path) {
         fs::create_dir_all(dir).unwrap();
         fs::write(dir.join("SKILL.md"), "---\nname: x\n---\n# x").unwrap();
+    }
+
+    #[test]
+    fn git_candidate_redacts_credentials_and_is_only_a_candidate() {
+        let tmp = tempdir().unwrap();
+        let repo = git2::Repository::init(tmp.path()).unwrap();
+        repo.remote("origin", "https://user:secret@example.com/owner/repo.git?token=private#fragment").unwrap();
+        let skill = tmp.path().join("skills/demo");
+        write_skill(&skill);
+        let candidate = git_candidate(&skill).unwrap();
+        assert_eq!(candidate.url, "https://example.com/owner/repo.git");
+        assert_eq!(candidate.subpath, "skills/demo");
+        assert!(candidate.branch.is_none());
+    }
+
+    #[test]
+    fn no_origin_has_no_candidate() {
+        let tmp = tempdir().unwrap();
+        git2::Repository::init(tmp.path()).unwrap();
+        let skill = tmp.path().join("demo");
+        write_skill(&skill);
+        assert!(git_candidate(&skill).is_none());
+    }
+
+    #[test]
+    fn plugin_ownership_requires_an_existing_user_scope_registry_path() {
+        let tmp = tempdir().unwrap();
+        let plugin = tmp.path().join("plugin");
+        let skill = plugin.join("skills/example");
+        write_skill(&skill);
+        let registry = tmp.path().join("installed_plugins.json");
+        let value = serde_json::json!({"plugins": {
+            "demo@market": [{"scope": "user", "installPath": plugin.to_string_lossy()}],
+            "project@market": [{"scope": "project", "installPath": tmp.path().to_string_lossy()}]
+        }});
+        fs::write(&registry, value.to_string()).unwrap();
+        let roots = claude_plugins_from_registry(&registry);
+        assert_eq!(plugin_owner(&skill, &roots).as_deref(), Some("demo@market"));
+        let independent = tmp.path().join("independent");
+        write_skill(&independent);
+        assert_eq!(plugin_owner(&independent, &roots), None);
+    }
+
+    #[test]
+    fn malformed_or_missing_plugin_registry_does_not_guess_ownership() {
+        let tmp = tempdir().unwrap();
+        let registry = tmp.path().join("installed_plugins.json");
+        assert!(claude_plugins_from_registry(&registry).is_empty());
+        fs::write(&registry, b"not-json").unwrap();
+        assert!(claude_plugins_from_registry(&registry).is_empty());
+        fs::write(&registry, r#"{"plugins":{"relative@market":[{"scope":"user","installPath":"relative/path"}]}}"#).unwrap();
+        assert!(claude_plugins_from_registry(&registry).is_empty());
     }
 
     fn run(root: &Path) -> Vec<PathBuf> {
@@ -482,7 +614,7 @@ mod tests {
     }
 
     #[test]
-    fn grouping_merges_same_name_same_fingerprint() {
+    fn grouping_keeps_equal_content_at_different_locations_separate() {
         let records = vec![
             DiscoveredSkillRecord {
                 id: "1".into(),
@@ -505,7 +637,7 @@ mod tests {
         ];
 
         let groups = group_discovered(&records);
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].locations.len(), 2);
+        assert_eq!(groups.len(), 2);
+        assert!(groups.iter().all(|group| group.locations.len() == 1));
     }
 }

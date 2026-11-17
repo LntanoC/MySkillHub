@@ -27,6 +27,7 @@ import { SkillMarkdown } from "./SkillMarkdown";
 import { AgentToggleSection, type AgentToggleItem } from "./AgentToggleSection";
 import { SkillProjectsSection } from "./SkillProjectsSection";
 import { SyncDots } from "./SyncDots";
+import { GitSourceAssociation } from "./GitSourceAssociation";
 
 interface Props {
   skill: ManagedSkill | null;
@@ -39,6 +40,7 @@ interface Props {
   isActivePreset: boolean;
   projects?: Project[];
   onProjectsChanged?: () => void;
+  onSourceChanged?: () => void;
 }
 
 export function SkillDetailPanel({
@@ -51,6 +53,7 @@ export function SkillDetailPanel({
   isActivePreset,
   projects,
   onProjectsChanged,
+  onSourceChanged,
 }: Props) {
   if (!skill) return null;
 
@@ -75,6 +78,7 @@ export function SkillDetailPanel({
       isActivePreset={isActivePreset}
       projects={projects}
       onProjectsChanged={onProjectsChanged}
+      onSourceChanged={onSourceChanged}
     />
   );
 }
@@ -89,6 +93,7 @@ function SkillDetailPanelContent({
   isActivePreset,
   projects,
   onProjectsChanged,
+  onSourceChanged,
 }: {
   skill: ManagedSkill;
   onClose: () => void;
@@ -100,6 +105,7 @@ function SkillDetailPanelContent({
   isActivePreset: boolean;
   projects?: Project[];
   onProjectsChanged?: () => void;
+  onSourceChanged?: () => void;
 }) {
   const { t } = useTranslation();
   const [doc, setDoc] = useState<SkillDocument | null>(null);
@@ -307,6 +313,9 @@ function SkillDetailPanelContent({
             </div>
           )}
         </div>
+      )}
+      {(skill.source_type === "local" || skill.source_type === "import") && (
+        <GitSourceAssociation skillId={skill.id} onChanged={onSourceChanged} />
       )}
     </>
   );
